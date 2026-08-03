@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual AI Agent</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <span class="icon">👁️</span>
+      <h2>Visual AI Agent</h2>
+    </div>
+    
+    <div class="status-box">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Active & Listening</span>
+    </div>
+
+    <div class="field">
+      <label for="serverUrl">Backend Ingestion API</label>
+      <input type="text" id="serverUrl" value="http://localhost:3000" placeholder="http://localhost:3000">
+    </div>
+
+    <div class="controls">
+      <button id="toggleBtn" class="btn primary">Pause Capture</button>
+      <button id="captureNowBtn" class="btn secondary">Capture Frame Now</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat-item">
+        <span class="stat-num" id="logCount">0</span>
+        <span class="stat-label">DOM Logs</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num" id="frameCount">0</span>
+        <span class="stat-label">Frames Captured</span>
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

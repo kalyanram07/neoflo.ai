@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Visual AI Capture Agent",
+  "version": "1.0.0",
+  "description": "Visual frame capture and DOM activity ingestion agent.",
+  "permissions": [
+    "offscreen",
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Visual AI Capture Status"
+  }
+}
