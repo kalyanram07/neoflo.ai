@@ -8,20 +8,22 @@ let lastCaptureTime = 0;
 let isOffscreenCreating = false;
 let isTabHidden = false;
 
-// Ensure offscreen document exists
+// Ensure offscreen document exists safely across all Chrome versions
 async function setupOffscreenDocument() {
-  const existingContexts = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT']
-  });
+  if (chrome.runtime && chrome.runtime.getContexts) {
+    const existingContexts = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT']
+    });
+    if (existingContexts.length > 0) return;
+  }
 
-  if (existingContexts.length > 0) return;
   if (isOffscreenCreating) return;
   isOffscreenCreating = true;
 
   try {
     await chrome.offscreen.createDocument({
       url: 'offscreen.html',
-      reasons: ['USER_MEDIA', 'DISPLAY_MEDIA', 'BLOBS'],
+      reasons: ['BLOBS', 'DOM_PARSER'],
       justification: 'Process frame capture, render AI bounding boxes, and compress WebP image'
     });
   } catch (err) {
@@ -46,7 +48,6 @@ function saveToOfflineQueue(endpoint, payload) {
   chrome.storage.local.get(['pendingQueue'], (res) => {
     const queue = res.pendingQueue || [];
     queue.push({ endpoint, payload, createdAt: new Date().toISOString() });
-    // Cap offline queue at 100 items to prevent storage explosion
     if (queue.length > 100) queue.shift();
     chrome.storage.local.set({ pendingQueue: queue });
     console.log(`[Visual AI Agent] Saved item to offline queue. Queue length: ${queue.length}`);
@@ -82,7 +83,6 @@ async function flushPendingQueue() {
   });
 }
 
-// Flush queue periodically
 setInterval(flushPendingQueue, 15000);
 
 // Send DOM Activity log to Backend API
@@ -98,7 +98,7 @@ async function sendActivityToBackend(payload) {
       chrome.storage.local.get(['logCount'], (r) => {
         chrome.storage.local.set({ logCount: (r.logCount || 0) + 1 });
       });
-      flushPendingQueue(); // Opportunity flush
+      flushPendingQueue();
     } else {
       saveToOfflineQueue('/api/activity', payload);
     }
@@ -109,7 +109,6 @@ async function sendActivityToBackend(payload) {
 
 // Feature 5: Perform Adaptive Throttled Frame Capture
 async function captureTabFrame(triggerReason = 'automated', elementRect = null, actionLabel = '') {
-  // Feature 5: Pause capture if tab is hidden
   if (isTabHidden && triggerReason !== 'manual') {
     return { skipped: true, reason: 'tab_hidden' };
   }
@@ -130,10 +129,9 @@ async function captureTabFrame(triggerReason = 'automated', elementRect = null, 
       return { skipped: true, reason: 'restricted_url' };
     }
 
-    const rawDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    const rawDataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' });
     if (!rawDataUrl) return { skipped: true, reason: 'no_capture' };
 
-    // Send to offscreen for WebP 0.75 compression and AI bounding box overlay
     const response = await chrome.runtime.sendMessage({
       target: 'offscreen',
       type: 'PROCESS_FRAME',

@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
   captureNowBtn.addEventListener('click', () => {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ type: 'MANUAL_CAPTURE' }, (response) => {
+        if (chrome.runtime.lastError) return;
         if (response && response.success) {
           const current = parseInt(frameCountEl.textContent, 10) || 0;
           frameCountEl.textContent = current + 1;

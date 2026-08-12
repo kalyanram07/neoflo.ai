@@ -36,7 +36,6 @@ function createApp(dbManager) {
     const newClient = { id: clientId, res };
     sseClients.push(newClient);
 
-    // Initial connection event
     res.write(`event: init\ndata: ${JSON.stringify({ connected: true, clientId })}\n\n`);
 
     req.on('close', () => {
@@ -44,9 +43,14 @@ function createApp(dbManager) {
     });
   });
 
+  // Defensive SSE event broadcast handler
   function broadcastEvent(eventType, data) {
     sseClients.forEach((client) => {
-      client.res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
+      try {
+        client.res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
+      } catch (err) {
+        // Ignore write failures to disconnected client streams
+      }
     });
   }
 
@@ -80,7 +84,6 @@ function createApp(dbManager) {
         timestamp: timestamp || new Date().toISOString()
       };
 
-      // Broadcast event to active dashboard clients
       broadcastEvent('activity', logRecord);
 
       res.status(201).json({
@@ -128,7 +131,6 @@ function createApp(dbManager) {
         timestamp: timestamp || new Date().toISOString()
       };
 
-      // Broadcast event to active dashboard clients
       broadcastEvent('capture', shotRecord);
 
       res.status(201).json({

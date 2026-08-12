@@ -28,12 +28,21 @@
       .replace(/\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[REDACTED_PHONE]');
   }
 
+  // Robust selector generator handling standard HTML and SVG DOM elements
   function getElementSelector(el) {
     if (!el || el === document) return 'document';
-    if (el.id) return `#${el.id}`;
+    if (el.id && typeof el.id === 'string') return `#${el.id}`;
     let sel = el.tagName ? el.tagName.toLowerCase() : 'element';
-    if (el.className && typeof el.className === 'string' && el.className.trim()) {
-      sel += `.${el.className.trim().split(/\s+/).join('.')}`;
+    
+    let className = '';
+    if (typeof el.className === 'string') {
+      className = el.className;
+    } else if (el.className && typeof el.className.baseVal === 'string') {
+      className = el.className.baseVal;
+    }
+
+    if (className.trim()) {
+      sel += `.${className.trim().split(/\s+/).join('.')}`;
     }
     return sel;
   }
@@ -147,5 +156,5 @@
     }
   });
 
-  console.log('[Visual AI Agent] Content script v2 initialized with PII masking & bounding rects.');
+  console.log('[Visual AI Agent] Content script initialized with SVG selector safety & PII masking.');
 })();
