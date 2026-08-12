@@ -1,4 +1,4 @@
--- schema.sql: Database tables for Visual AI Backend Ingestion
+-- schema.sql: Database tables and indexes for Visual AI Backend Ingestion
 
 CREATE TABLE IF NOT EXISTS activity_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,3 +21,9 @@ CREATE TABLE IF NOT EXISTS screenshots (
   timestamp TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Feature 7: Performance Indexing
+CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_logs (timestamp);
+CREATE INDEX IF NOT EXISTS idx_activity_url ON activity_logs (page_url);
+CREATE INDEX IF NOT EXISTS idx_screenshots_timestamp ON screenshots (timestamp);
+CREATE INDEX IF NOT EXISTS idx_screenshots_url ON screenshots (page_url);
