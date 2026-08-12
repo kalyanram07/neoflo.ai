@@ -1,4 +1,4 @@
-// server.js - Backend Ingestion Server Entry Point
+// server.js - Backend Ingestion Server Entry Point with Pruning Cron
 
 const createApp = require('./app');
 const DatabaseManager = require('./db');
@@ -11,9 +11,20 @@ async function startServer() {
 
   const app = createApp(dbManager);
 
-  app.listen(PORT, () => {
-    console.log(`[Visual AI Backend] Ingestion server listening on http://localhost:${PORT}`);
+  // Feature 7: Hourly Database Data Pruning Cron Job
+  const PRUNE_INTERVAL_MS = 60 * 60 * 1000; // Every 1 hour
+  setInterval(() => {
+    dbManager.pruneOldData(500).then(() => {
+      console.log('[Visual AI Backend] Hourly database pruning executed successfully.');
+    });
+  }, PRUNE_INTERVAL_MS);
+
+  const server = app.listen(PORT, () => {
+    console.log(`[Visual AI Backend v2] Listening on http://localhost:${PORT}`);
+    console.log(`[Visual AI Backend v2] Live Dashboard available at http://localhost:${PORT}/dashboard`);
   });
+
+  return server;
 }
 
 if (require.main === module) {

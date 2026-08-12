@@ -10,7 +10,7 @@
   <div class="card">
     <div class="header">
       <span class="icon">👁️</span>
-      <h2>Visual AI Agent</h2>
+      <h2>Visual AI Agent v2</h2>
     </div>
     
     <div class="status-box">
@@ -26,6 +26,7 @@
     <div class="controls">
       <button id="toggleBtn" class="btn primary">Pause Capture</button>
       <button id="captureNowBtn" class="btn secondary">Capture Frame Now</button>
+      <a href="http://localhost:3000/dashboard" target="_blank" class="btn link-btn">🖥️ Open Live Dashboard</a>
     </div>
 
     <div class="stats">
@@ -35,7 +36,11 @@
       </div>
       <div class="stat-item">
         <span class="stat-num" id="frameCount">0</span>
-        <span class="stat-label">Frames Captured</span>
+        <span class="stat-label">Frames</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num" id="queueCount">0</span>
+        <span class="stat-label">Offline Queue</span>
       </div>
     </div>
   </div>

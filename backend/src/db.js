@@ -1,4 +1,4 @@
-// db.js - SQLite Database Driver & Schema Initializer
+// db.js - SQLite Database Driver & Schema Initializer with Pruning Support
 
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
@@ -15,7 +15,6 @@ class DatabaseManager {
       this.db = new sqlite3.Database(this.dbPath, (err) => {
         if (err) return reject(err);
 
-        // Load and execute schema
         const schemaPath = path.join(__dirname, '..', 'schema.sql');
         const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
@@ -43,6 +42,28 @@ class DatabaseManager {
         resolve(rows);
       });
     });
+  }
+
+  // Feature 7: Automated Retention Cleanup & Data Pruning
+  async pruneOldData(maxRecords = 500) {
+    try {
+      // Prune old activity logs keeping maxRecords
+      await this.run(
+        `DELETE FROM activity_logs WHERE id NOT IN (SELECT id FROM activity_logs ORDER BY id DESC LIMIT ?)`,
+        [maxRecords]
+      );
+
+      // Prune old screenshots keeping maxRecords
+      await this.run(
+        `DELETE FROM screenshots WHERE id NOT IN (SELECT id FROM screenshots ORDER BY id DESC LIMIT ?)`,
+        [maxRecords]
+      );
+
+      return { success: true };
+    } catch (err) {
+      console.error('Error during database pruning:', err);
+      return { success: false, error: err.message };
+    }
   }
 
   close() {

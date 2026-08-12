@@ -1,9 +1,12 @@
-// background.js - Service Worker & Throttling Engine for Visual AI Agent
+// background.js - Adaptive Throttling & Offline Retry Engine for Visual AI Agent
 
 const DEFAULT_SERVER_URL = 'http://localhost:3000';
-const CAPTURE_THROTTLE_MS = 1000; // Throttling: max 1 frame per 1000ms
+const ACTIVE_THROTTLE_MS = 500;  // 500ms throttle for user interactions
+const IDLE_THROTTLE_MS = 3000;   // 3000ms throttle for passive captures
+
 let lastCaptureTime = 0;
 let isOffscreenCreating = false;
+let isTabHidden = false;
 
 // Ensure offscreen document exists
 async function setupOffscreenDocument() {
@@ -11,10 +14,7 @@ async function setupOffscreenDocument() {
     contextTypes: ['OFFSCREEN_DOCUMENT']
   });
 
-  if (existingContexts.length > 0) {
-    return;
-  }
-
+  if (existingContexts.length > 0) return;
   if (isOffscreenCreating) return;
   isOffscreenCreating = true;
 
@@ -22,7 +22,7 @@ async function setupOffscreenDocument() {
     await chrome.offscreen.createDocument({
       url: 'offscreen.html',
       reasons: ['USER_MEDIA', 'DISPLAY_MEDIA', 'BLOBS'],
-      justification: 'Process frame capture and convert visual frame to base64 encoding'
+      justification: 'Process frame capture, render AI bounding boxes, and compress WebP image'
     });
   } catch (err) {
     if (!err.message.includes('Only a single offscreen document may be created')) {
@@ -33,7 +33,6 @@ async function setupOffscreenDocument() {
   }
 }
 
-// Fetch configured backend URL
 async function getServerUrl() {
   return new Promise((resolve) => {
     chrome.storage.local.get(['serverUrl'], (res) => {
@@ -41,6 +40,50 @@ async function getServerUrl() {
     });
   });
 }
+
+// Feature 4: Save payload to offline queue if server is unreachable
+function saveToOfflineQueue(endpoint, payload) {
+  chrome.storage.local.get(['pendingQueue'], (res) => {
+    const queue = res.pendingQueue || [];
+    queue.push({ endpoint, payload, createdAt: new Date().toISOString() });
+    // Cap offline queue at 100 items to prevent storage explosion
+    if (queue.length > 100) queue.shift();
+    chrome.storage.local.set({ pendingQueue: queue });
+    console.log(`[Visual AI Agent] Saved item to offline queue. Queue length: ${queue.length}`);
+  });
+}
+
+// Feature 4: Flush offline queue when reconnected
+async function flushPendingQueue() {
+  chrome.storage.local.get(['pendingQueue'], async (res) => {
+    const queue = res.pendingQueue || [];
+    if (queue.length === 0) return;
+
+    console.log(`[Visual AI Agent] Attempting to flush ${queue.length} offline queued items...`);
+    const serverUrl = await getServerUrl();
+    const remainingQueue = [];
+
+    for (const item of queue) {
+      try {
+        const response = await fetch(`${serverUrl}${item.endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.payload)
+        });
+        if (!response.ok) {
+          remainingQueue.push(item);
+        }
+      } catch (err) {
+        remainingQueue.push(item);
+      }
+    }
+
+    chrome.storage.local.set({ pendingQueue: remainingQueue });
+  });
+}
+
+// Flush queue periodically
+setInterval(flushPendingQueue, 15000);
 
 // Send DOM Activity log to Backend API
 async function sendActivityToBackend(payload) {
@@ -52,21 +95,29 @@ async function sendActivityToBackend(payload) {
       body: JSON.stringify(payload)
     });
     if (res.ok) {
-      // Increment stored counter for popup UI
       chrome.storage.local.get(['logCount'], (r) => {
-        const count = (r.logCount || 0) + 1;
-        chrome.storage.local.set({ logCount: count });
+        chrome.storage.local.set({ logCount: (r.logCount || 0) + 1 });
       });
+      flushPendingQueue(); // Opportunity flush
+    } else {
+      saveToOfflineQueue('/api/activity', payload);
     }
   } catch (err) {
-    console.warn('[Visual AI Agent] Could not reach backend activity API:', err.message);
+    saveToOfflineQueue('/api/activity', payload);
   }
 }
 
-// Perform Throttled Frame Capture
-async function captureTabFrame(triggerReason = 'automated') {
+// Feature 5: Perform Adaptive Throttled Frame Capture
+async function captureTabFrame(triggerReason = 'automated', elementRect = null, actionLabel = '') {
+  // Feature 5: Pause capture if tab is hidden
+  if (isTabHidden && triggerReason !== 'manual') {
+    return { skipped: true, reason: 'tab_hidden' };
+  }
+
+  const requiredThrottle = triggerReason === 'event_triggered' ? ACTIVE_THROTTLE_MS : IDLE_THROTTLE_MS;
   const now = Date.now();
-  if (now - lastCaptureTime < CAPTURE_THROTTLE_MS && triggerReason !== 'manual') {
+
+  if (now - lastCaptureTime < requiredThrottle && triggerReason !== 'manual') {
     return { throttled: true };
   }
   lastCaptureTime = now;
@@ -79,16 +130,17 @@ async function captureTabFrame(triggerReason = 'automated') {
       return { skipped: true, reason: 'restricted_url' };
     }
 
-    // Capture tab screenshot as data URL
     const rawDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
     if (!rawDataUrl) return { skipped: true, reason: 'no_capture' };
 
-    // Send raw frame to offscreen for canvas processing & base64 encoding
+    // Send to offscreen for WebP 0.75 compression and AI bounding box overlay
     const response = await chrome.runtime.sendMessage({
       target: 'offscreen',
       type: 'PROCESS_FRAME',
       dataUrl: rawDataUrl,
-      maxWidth: 1280
+      maxWidth: 1280,
+      elementRect,
+      actionLabel
     });
 
     if (response && response.success) {
@@ -99,22 +151,27 @@ async function captureTabFrame(triggerReason = 'automated') {
         base64Image: response.base64Image,
         width: response.width,
         height: response.height,
-        timestamp: response.timestamp,
-        triggerReason
+        triggerReason,
+        timestamp: response.timestamp
       };
 
-      const res = await fetch(`${serverUrl}/api/capture`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(capturePayload)
-      });
-
-      if (res.ok) {
-        chrome.storage.local.get(['frameCount'], (r) => {
-          const count = (r.frameCount || 0) + 1;
-          chrome.storage.local.set({ frameCount: count });
+      try {
+        const res = await fetch(`${serverUrl}/api/capture`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(capturePayload)
         });
-        return { success: true };
+
+        if (res.ok) {
+          chrome.storage.local.get(['frameCount'], (r) => {
+            chrome.storage.local.set({ frameCount: (r.frameCount || 0) + 1 });
+          });
+          return { success: true };
+        } else {
+          saveToOfflineQueue('/api/capture', capturePayload);
+        }
+      } catch {
+        saveToOfflineQueue('/api/capture', capturePayload);
       }
     }
   } catch (err) {
@@ -125,22 +182,27 @@ async function captureTabFrame(triggerReason = 'automated') {
   return { success: false };
 }
 
-// Message Listener for Content Script and Popup
+// Message Listener for Content Script & Popup UI
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'DOM_ACTIVITY') {
     sendActivityToBackend(message.payload);
 
-    // Optionally trigger a throttled visual frame capture on important user events
-    if (['click', 'keydown'].includes(message.payload.eventType)) {
-      captureTabFrame('event_triggered');
+    if (['click', 'keydown', 'input_change'].includes(message.payload.eventType)) {
+      const label = `${message.payload.eventType.toUpperCase()}: ${message.payload.details.target || 'ELEMENT'}`;
+      captureTabFrame('event_triggered', message.payload.elementRect, label);
     }
+    return false;
+  }
+
+  if (message.type === 'VISIBILITY_CHANGE') {
+    isTabHidden = !!message.isHidden;
     return false;
   }
 
   if (message.type === 'MANUAL_CAPTURE') {
     captureTabFrame('manual').then((res) => sendResponse(res));
-    return true; // async response
+    return true;
   }
 });
 
-console.log('[Visual AI Agent] Background service worker initialized with throttling (1000ms).');
+console.log('[Visual AI Agent] Service Worker v2 running with adaptive throttling & offline queueing.');

@@ -6,12 +6,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusText = document.getElementById('statusText');
   const logCountEl = document.getElementById('logCount');
   const frameCountEl = document.getElementById('frameCount');
+  const queueCountEl = document.getElementById('queueCount');
 
   let isCapturing = true;
 
-  // Load stored settings
+  // Load stored settings and stats
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get(['isCapturing', 'serverUrl', 'logCount', 'frameCount'], (res) => {
+    chrome.storage.local.get(['isCapturing', 'serverUrl', 'logCount', 'frameCount', 'pendingQueue'], (res) => {
       if (res.isCapturing !== undefined) {
         isCapturing = res.isCapturing;
         updateUI();
@@ -21,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (res.logCount !== undefined) logCountEl.textContent = res.logCount;
       if (res.frameCount !== undefined) frameCountEl.textContent = res.frameCount;
+      if (res.pendingQueue) queueCountEl.textContent = res.pendingQueue.length;
     });
   }
 

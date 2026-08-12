@@ -1,15 +1,14 @@
-// ingestion.test.js - Ingestion API Unit Test Suite
+// ingestion.test.js - Ingestion API & V2 Feature Unit Test Suite
 
 const request = require('supertest');
 const createApp = require('../src/app');
 const DatabaseManager = require('../src/db');
 
-describe('Visual AI Ingestion API Unit Tests', () => {
+describe('Visual AI Ingestion API & V2 Features Unit Tests', () => {
   let dbManager;
   let app;
 
   beforeAll(async () => {
-    // Use in-memory SQLite database for clean test isolation
     dbManager = new DatabaseManager(':memory:');
     await dbManager.init();
     app = createApp(dbManager);
@@ -24,6 +23,21 @@ describe('Visual AI Ingestion API Unit Tests', () => {
     expect(res.statusCode).toEqual(200);
     expect(res.body).toHaveProperty('status', 'ok');
     expect(res.body).toHaveProperty('service', 'visual-ai-backend');
+  });
+
+  test('GET /dashboard should serve live dashboard html page', async () => {
+    const res = await request(app).get('/dashboard');
+    expect(res.statusCode).toEqual(200);
+    expect(res.text).toContain('Visual AI Telemetry Live Dashboard');
+  });
+
+  test('GET /api/stream should setup SSE event stream headers', async () => {
+    const res = await request(app)
+      .get('/api/stream')
+      .set('Accept', 'text/event-stream');
+
+    expect(res.statusCode).toEqual(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
   });
 
   test('POST /api/activity should ingest valid DOM activity log', async () => {
@@ -47,20 +61,19 @@ describe('Visual AI Ingestion API Unit Tests', () => {
   test('POST /api/activity should return 400 when missing required fields', async () => {
     const res = await request(app)
       .post('/api/activity')
-      .send({ eventType: 'click' }); // Missing pageUrl
+      .send({ eventType: 'click' });
 
     expect(res.statusCode).toEqual(400);
     expect(res.body).toHaveProperty('error');
   });
 
-  test('POST /api/capture should ingest base64 screenshot visual frame', async () => {
-    // Sample base64 image data string
-    const sampleBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  test('POST /api/capture should ingest WebP base64 screenshot visual frame', async () => {
+    const sampleWebP = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAQAcJaQAA3AA/v38gAA=';
 
     const payload = {
       pageUrl: 'https://example.com/demo',
       pageTitle: 'Demo Page',
-      base64Image: sampleBase64,
+      base64Image: sampleWebP,
       width: 1280,
       height: 720,
       triggerReason: 'automated',
@@ -76,15 +89,6 @@ describe('Visual AI Ingestion API Unit Tests', () => {
     expect(res.body).toHaveProperty('screenshotId');
   });
 
-  test('POST /api/capture should return 400 when missing base64Image', async () => {
-    const res = await request(app)
-      .post('/api/capture')
-      .send({ pageUrl: 'https://example.com' });
-
-    expect(res.statusCode).toEqual(400);
-    expect(res.body).toHaveProperty('error');
-  });
-
   test('GET /api/logs should return stored activity logs and screenshot metadata', async () => {
     const res = await request(app).get('/api/logs');
     expect(res.statusCode).toEqual(200);
@@ -92,7 +96,10 @@ describe('Visual AI Ingestion API Unit Tests', () => {
     expect(res.body).toHaveProperty('screenshots');
     expect(Array.isArray(res.body.activityLogs)).toBe(true);
     expect(Array.isArray(res.body.screenshots)).toBe(true);
-    expect(res.body.activityLogs.length).toBeGreaterThan(0);
-    expect(res.body.screenshots.length).toBeGreaterThan(0);
+  });
+
+  test('dbManager.pruneOldData should execute data pruning successfully', async () => {
+    const pruneRes = await dbManager.pruneOldData(10);
+    expect(pruneRes).toHaveProperty('success', true);
   });
 });

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual AI Telemetry - Live Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border: rgba(255, 255, 255, 0.1);
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.3);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #22c55e;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid var(--success);
+      color: var(--success);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      padding: 16px 20px;
+      border-radius: 12px;
+    }
+
+    .stat-val {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-lbl {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .columns { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      height: 600px;
+    }
+
+    .panel h2 {
+      font-size: 18px;
+      margin: 0 0 16px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feed {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-right: 8px;
+    }
+
+    .log-item {
+      background: rgba(15, 23, 42, 0.6);
+      border-left: 4px solid var(--accent);
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .log-event {
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    .log-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      background: rgba(0,0,0,0.3);
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-top: 6px;
+      color: #e2e8f0;
+      word-break: break-all;
+    }
+
+    .shot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .shot-card {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .shot-card img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .shot-card img:hover {
+      transform: scale(1.05);
+    }
+
+    .shot-info {
+      padding: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <span style="font-size: 28px;">👁️</span>
+      <h1>Visual AI Telemetry Live Dashboard</h1>
+    </div>
+    <div class="status-badge" id="connStatus">
+      <span class="pulse"></span>
+      <span id="connText">Live SSE Stream Connected</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="stat-card">
+      <div class="stat-val" id="statLogs">0</div>
+      <div class="stat-lbl">DOM Activity Logs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="statShots">0</div>
+      <div class="stat-lbl">Visual Frame Captures</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="statFormat">WebP 0.75</div>
+      <div class="stat-lbl">Image Format</div>
+    </div>
+  </div>
+
+  <div class="columns">
+    <div class="panel">
+      <h2>⚡ Live DOM Activity Stream</h2>
+      <div class="feed" id="activityFeed"></div>
+    </div>
+
+    <div class="panel">
+      <h2>📸 Real-Time Frame Screenshots (AI Bounding Box Overlay)</h2>
+      <div class="shot-grid" id="shotGrid"></div>
+    </div>
+  </div>
+
+  <script>
+    const activityFeed = document.getElementById('activityFeed');
+    const shotGrid = document.getElementById('shotGrid');
+    const statLogs = document.getElementById('statLogs');
+    const statShots = document.getElementById('statShots');
+    let logCount = 0;
+    let shotCount = 0;
+
+    // Load initial logs
+    fetch('/api/logs')
+      .then(res => res.json())
+      .then(data => {
+        if (data.activityLogs) {
+          data.activityLogs.forEach(addLogItem);
+          logCount = data.activityLogs.length;
+          statLogs.textContent = logCount;
+        }
+        if (data.screenshots) {
+          data.screenshots.forEach(addShotItem);
+          shotCount = data.screenshots.length;
+          statShots.textContent = shotCount;
+        }
+      });
+
+    // Feature 6: Server-Sent Events (SSE) Live Stream Listener
+    const evtSource = new EventSource('/api/stream');
+
+    evtSource.onopen = () => {
+      document.getElementById('connText').textContent = 'Live SSE Stream Connected';
+    };
+
+    evtSource.onerror = () => {
+      document.getElementById('connText').textContent = 'Reconnecting...';
+    };
+
+    evtSource.addEventListener('activity', (e) => {
+      const log = JSON.parse(e.data);
+      addLogItem(log, true);
+      logCount++;
+      statLogs.textContent = logCount;
+    });
+
+    evtSource.addEventListener('capture', (e) => {
+      const shot = JSON.parse(e.data);
+      addShotItem(shot, true);
+      shotCount++;
+      statShots.textContent = shotCount;
+    });
+
+    function addLogItem(log, prepend = false) {
+      const item = document.createElement('div');
+      item.className = 'log-item';
+      const timeStr = new Date(log.timestamp).toLocaleTimeString();
+      item.innerHTML = `
+        <div class="log-header">
+          <span class="log-event">${log.event_type || log.eventType}</span>
+          <span>${timeStr}</span>
+        </div>
+        <div><strong>Page:</strong> ${log.page_url || log.pageUrl}</div>
+        <div class="log-code">${JSON.stringify(log.details || {})}</div>
+      `;
+      if (prepend) {
+        activityFeed.insertBefore(item, activityFeed.firstChild);
+      } else {
+        activityFeed.appendChild(item);
+      }
+    }
+
+    function addShotItem(shot, prepend = false) {
+      const card = document.createElement('div');
+      card.className = 'shot-card';
+      const imgSrc = shot.base64_image || shot.base64Image;
+      const timeStr = new Date(shot.timestamp).toLocaleTimeString();
+      card.innerHTML = `
+        <img src="${imgSrc}" alt="Frame" onclick="window.open('${imgSrc}')">
+        <div class="shot-info">
+          <div><strong>Reason:</strong> ${shot.trigger_reason || shot.triggerReason || 'auto'}</div>
+          <div>${timeStr} (${shot.width}x${shot.height})</div>
+        </div>
+      `;
+      if (prepend) {
+        shotGrid.insertBefore(card, shotGrid.firstChild);
+      } else {
+        shotGrid.appendChild(card);
+      }
+    }
+  </script>
+</body>
+</html>

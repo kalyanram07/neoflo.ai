@@ -4,7 +4,7 @@ body {
   color: #f8fafc;
   margin: 0;
   padding: 12px;
-  width: 280px;
+  width: 290px;
 }
 
 .card {
@@ -91,6 +91,8 @@ body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
+  text-align: center;
   transition: all 0.2s ease;
 }
 
@@ -112,6 +114,15 @@ body {
   background-color: #475569;
 }
 
+.btn.link-btn {
+  background: linear-gradient(135deg, #4f46e5, #0284c7);
+  color: #ffffff;
+}
+
+.btn.link-btn:hover {
+  filter: brightness(1.15);
+}
+
 .stats {
   display: flex;
   justify-content: space-around;
@@ -127,7 +138,7 @@ body {
 }
 
 .stat-num {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: bold;
   color: #38bdf8;
 }

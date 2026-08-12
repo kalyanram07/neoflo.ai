@@ -1,21 +1,54 @@
-// app.js - Express Server Definition & Ingestion Routes
+// app.js - Express Server with SSE Live Streaming & Dashboard Integration
 
 const express = require('express');
 const cors = require('cors');
-const DatabaseManager = require('./db');
+const path = require('path');
 
 function createApp(dbManager) {
   const app = express();
+  let sseClients = [];
 
   // Middleware - Enable CORS and large payload body-parser (50MB for Base64 visual frames)
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+  // Feature 6: Serve Dashboard Static Files
+  app.use(express.static(path.join(__dirname, '..', 'public')));
+
+  app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'dashboard.html'));
+  });
+
   // Health Check Endpoint
   app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok', service: 'visual-ai-backend', timestamp: new Date().toISOString() });
   });
+
+  // Feature 6: Server-Sent Events (SSE) Live Stream Registration
+  app.get('/api/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const clientId = Date.now();
+    const newClient = { id: clientId, res };
+    sseClients.push(newClient);
+
+    // Initial connection event
+    res.write(`event: init\ndata: ${JSON.stringify({ connected: true, clientId })}\n\n`);
+
+    req.on('close', () => {
+      sseClients = sseClients.filter((c) => c.id !== clientId);
+    });
+  });
+
+  function broadcastEvent(eventType, data) {
+    sseClients.forEach((client) => {
+      client.res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
+    });
+  }
 
   // POST /api/activity - DOM Activity Ingestion Endpoint
   app.post('/api/activity', async (req, res) => {
@@ -37,6 +70,18 @@ function createApp(dbManager) {
         JSON.stringify(details || {}),
         timestamp || new Date().toISOString()
       ]);
+
+      const logRecord = {
+        id: result.id,
+        eventType,
+        pageUrl,
+        pageTitle,
+        details,
+        timestamp: timestamp || new Date().toISOString()
+      };
+
+      // Broadcast event to active dashboard clients
+      broadcastEvent('activity', logRecord);
 
       res.status(201).json({
         success: true,
@@ -72,6 +117,20 @@ function createApp(dbManager) {
         timestamp || new Date().toISOString()
       ]);
 
+      const shotRecord = {
+        id: result.id,
+        pageUrl,
+        pageTitle,
+        base64Image,
+        width,
+        height,
+        triggerReason,
+        timestamp: timestamp || new Date().toISOString()
+      };
+
+      // Broadcast event to active dashboard clients
+      broadcastEvent('capture', shotRecord);
+
       res.status(201).json({
         success: true,
         message: 'Visual frame screenshot ingested successfully',
@@ -87,9 +146,8 @@ function createApp(dbManager) {
   app.get('/api/logs', async (req, res) => {
     try {
       const activities = await dbManager.all('SELECT id, event_type, page_url, page_title, details, timestamp, created_at FROM activity_logs ORDER BY id DESC LIMIT 50');
-      const screenshots = await dbManager.all('SELECT id, page_url, page_title, width, height, trigger_reason, timestamp, created_at FROM screenshots ORDER BY id DESC LIMIT 50');
+      const screenshots = await dbManager.all('SELECT id, page_url, page_title, base64_image, width, height, trigger_reason, timestamp, created_at FROM screenshots ORDER BY id DESC LIMIT 50');
 
-      // Parse JSON details
       const parsedActivities = activities.map((a) => {
         try {
           return { ...a, details: JSON.parse(a.details) };
